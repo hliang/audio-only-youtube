@@ -3,7 +3,6 @@ import React, { useEffect } from "react"
 export default function Offscreen() {
     useEffect(() => {
         const iframe = document.getElementById("sandboxIframe") as HTMLIFrameElement
-        console.log(iframe)
         window.addEventListener('message', function listener(event) {
             if (event.source !== iframe.contentWindow) {
                 return;

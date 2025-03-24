@@ -2,6 +2,17 @@ const querystring = require('querystring');
 
 const evaluationPromiseMapping = new Map()
 let creating; // A global promise to avoid concurrency issues
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.target !== 'background') {
+      return false;
+  }
+
+  const resolver = evaluationPromiseMapping.get(message.data.messageId)
+  if (!resolver) return false;
+  resolver(message.data.result)
+});
+
 const createOffscreenDocument = async () => {
   if (creating) {
     await creating;
@@ -14,16 +25,6 @@ const createOffscreenDocument = async () => {
     await creating;
     creating = null;
   }
-
-  chrome.runtime.onMessage.addListener((message) => {
-    if (message.target !== 'background') {
-        return false;
-    }
-
-    const resolver = evaluationPromiseMapping.get(message.data.messageId)
-    if (!resolver) return false;
-    resolver(message.data.result)
-  });
 }
 createOffscreenDocument();
 
