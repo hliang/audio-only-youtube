@@ -190,24 +190,24 @@ exports.getInfo = async(id, options) => {
   utils.applyDefaultHeaders(options);
   const info = await exports.getBasicInfo(id, options);
   let funcs = [];
-    // Bring back web-scraping for now. TODO: tv client
-    info.html5player = info.html5player ||
-      getHTML5player(await getWatchHTMLPageBody(id, options)) || getHTML5player(await getEmbedPageBody(id, options));
-    if (!info.html5player) {
-      throw Error('Unable to find html5player file');
+  info.html5player = info.html5player ||
+    getHTML5player(await getWatchHTMLPageBody(id, options)) || getHTML5player(await getEmbedPageBody(id, options));
+  if (!info.html5player) {
+    throw Error('Unable to find html5player file');
+  }
+  info.html5player = new URL(info.html5player, BASE_URL).toString();
+ 
+  funcs.push(sig.decipherFormats(parseFormats(info.player_response), info.html5player, options));
+  if (info.player_response && info.player_response.streamingData) {
+    if (info.player_response.streamingData.dashManifestUrl) {
+      let url = info.player_response.streamingData.dashManifestUrl;
+      funcs.push(getDashManifest(url, options));
     }
-    const html5player = new URL(info.html5player, BASE_URL).toString();
-    funcs.push(sig.decipherFormats(parseFormats(info.player_response), html5player, options));
-    if (info.player_response && info.player_response.streamingData) {
-      if (info.player_response.streamingData.dashManifestUrl) {
-        let url = info.player_response.streamingData.dashManifestUrl;
-        funcs.push(getDashManifest(url, options));
-      }
-      if (info.player_response.streamingData.hlsManifestUrl) {
-        let url = info.player_response.streamingData.hlsManifestUrl;
-        funcs.push(getM3U8(url, options));
-      }
+    if (info.player_response.streamingData.hlsManifestUrl) {
+      let url = info.player_response.streamingData.hlsManifestUrl;
+      funcs.push(getM3U8(url, options));
     }
+  }
 
   let results = await Promise.all(funcs);
   info.formats = Object.values(Object.assign({}, ...results));

@@ -5,7 +5,7 @@ let creating; // A global promise to avoid concurrency issues
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message.target !== 'background') {
-      return false;
+    return false;
   }
 
   const resolver = evaluationPromiseMapping.get(message.data.messageId)
@@ -43,16 +43,16 @@ async function setupSandbox() {
 }
 
 const randomString = (length) => {
-    let result = '';
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    const charactersLength = characters.length;
-    let counter = 0;
-    while (counter < length) {
-      result += characters.charAt(Math.floor(Math.random() * charactersLength));
-      counter += 1;
-    }
-    return result;
+  let result = '';
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const charactersLength = characters.length;
+  let counter = 0;
+  while (counter < length) {
+    result += characters.charAt(Math.floor(Math.random() * charactersLength));
+    counter += 1;
   }
+  return result;
+}
 
 const evaluateInSandbox = async (script, argumentName, argumentValue) => {
   await setupSandbox();
@@ -80,29 +80,50 @@ const N_ARGUMENT = "ncode";
  * @param {string} nTransformScript
  */
 exports.setDownloadURL = async (format, decipherScript, nTransformScript) => {
-    if (!decipherScript) return;
+  if (!format) return;
 
-    const decipher = async url => {
-      const args = querystring.parse(url);
-      if (!args.s) return args.url;
-      const components = new URL(decodeURIComponent(args.url));
-      const signature = await evaluateInSandbox(decipherScript, DECIPHER_ARGUMENT, decodeURIComponent(args.s))
-      components.searchParams.set(args.sp || 'sig', signature);
-      return components.toString();
-    };
+  const decipher = async url => {
+    const args = querystring.parse(url);
+    if (!args.s || !decipherScript) return args.url;
 
-    const nTransform = async url => {
-      const components = new URL(decodeURIComponent(url));
-      const n = components.searchParams.get('n');
-      if (!n || !nTransformScript) return url;
-      const transformedN = await evaluateInSandbox(nTransformScript, N_ARGUMENT, n)
-      components.searchParams.set('n', transformedN);
-      return components.toString();
-    };
+    const components = new URL(decodeURIComponent(args.url));
+    const signature = await evaluateInSandbox(decipherScript, DECIPHER_ARGUMENT, decodeURIComponent(args.s))
+    components.searchParams.set(args.sp || 'sig', signature);
+    return components.toString();
+  };
 
-    const cipher = !format.url;
-    const url = format.url || format.signatureCipher || format.cipher;
+  const nTransform = async url => {
+    const components = new URL(decodeURIComponent(url));
+    const n = components.searchParams.get('n');
+    if (!n || !nTransformScript) return url;
+
+    const transformedN = await evaluateInSandbox(nTransformScript, N_ARGUMENT, n)
+    if (transformedN) {
+      if (n === transformedN) {
+        console.warn("Transformed n parameter is the same as input, n function possibly short-circuited");
+      } else if (transformedN.startsWith("enhanced_except_") || transformedN.endsWith("_w8_" + n)) {
+        console.warn("N function did not complete due to exception");
+      }
+
+      components.searchParams.set("n", transformedN);
+    } else {
+      console.warn("Transformed n parameter is null, n function possibly faulty");
+    }
+
+    return components.toString();
+  };
+
+  const cipher = !format.url;
+  const url = format.url || format.signatureCipher || format.cipher;
+
+  if (!url) return;
+
+  try {
     format.url = await nTransform(cipher ? await decipher(url) : url);
+
     delete format.signatureCipher;
     delete format.cipher;
-  };
+  } catch (err) {
+    console.error("Error setting download URL:", err);
+  }
+};
